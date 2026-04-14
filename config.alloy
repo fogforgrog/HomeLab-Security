@@ -1,0 +1,107 @@
+// Grafana Alloy Configuration
+// Location: /etc/alloy/config.alloy on Raspberry Pi 4
+// Purpose: Ships security logs from Pi → Loki on ThinkPad L570 (10.0.0.30:3100)
+//
+// Log sources:
+//   - Suricata IPS alerts (fast.log + eve.json)
+//   - Pi-hole DNS logs
+//   - Fail2ban ban events
+//   - SSH auth log
+//
+// Install Alloy: https://grafana.com/docs/alloy/latest/install/linux/
+// Restart: sudo systemctl restart alloy
+// Status:  sudo systemctl status alloy
+// Logs:    sudo journalctl -u alloy -f
+
+// ============================================================
+// Suricata - Fast Log (IPS Alerts)
+// Grafana query: {job="suricata", type="fast"}
+// ============================================================
+loki.source.file "suricata_fast" {
+  targets = [{
+    __path__ = "/var/log/suricata/fast.log",
+    job       = "suricata",
+    type      = "fast",
+    host      = "raspberry",
+  }]
+  forward_to = [loki.write.default.receiver]
+}
+
+// ============================================================
+// Suricata - EVE JSON (Full Event Log)
+// Grafana query: {job="suricata", type="eve"}
+// ============================================================
+loki.source.file "suricata_eve" {
+  targets = [{
+    __path__ = "/var/log/suricata/eve.json",
+    job       = "suricata",
+    type      = "eve",
+    host      = "raspberry",
+  }]
+  forward_to = [loki.write.default.receiver]
+}
+
+// ============================================================
+// Pi-hole - DNS Query Log
+// Grafana query: {job="pihole", type="dns"}
+// ============================================================
+loki.source.file "pihole" {
+  targets = [{
+    __path__ = "/var/log/pihole/pihole.log",
+    job       = "pihole",
+    type      = "dns",
+    host      = "raspberry",
+  }]
+  forward_to = [loki.write.default.receiver]
+}
+
+// ============================================================
+// Pi-hole - FTL Engine Log
+// Grafana query: {job="pihole", type="ftl"}
+// ============================================================
+loki.source.file "pihole_ftl" {
+  targets = [{
+    __path__ = "/var/log/pihole/FTL.log",
+    job       = "pihole",
+    type      = "ftl",
+    host      = "raspberry",
+  }]
+  forward_to = [loki.write.default.receiver]
+}
+
+// ============================================================
+// Fail2ban - Ban/Unban Events
+// Grafana query: {job="security"} |= "Ban"
+// ============================================================
+loki.source.file "fail2ban" {
+  targets = [{
+    __path__ = "/var/log/fail2ban.log",
+    job       = "security",
+    type      = "fail2ban",
+    host      = "raspberry",
+  }]
+  forward_to = [loki.write.default.receiver]
+}
+
+// ============================================================
+// Auth Log - SSH login attempts
+// Grafana query: {job="security", type="auth"}
+// ============================================================
+loki.source.file "auth" {
+  targets = [{
+    __path__ = "/var/log/auth.log",
+    job       = "security",
+    type      = "auth",
+    host      = "raspberry",
+  }]
+  forward_to = [loki.write.default.receiver]
+}
+
+// ============================================================
+// Loki Output - Send all logs to laptop SIEM
+// ============================================================
+loki.write "default" {
+  endpoint {
+    url = "http://10.0.0.30:3100/loki/api/v1/push"
+  }
+}
