@@ -1,0 +1,101 @@
+version: '3.8'
+# HomeLab Security Stack - SIEM + SOAR
+# Runs on ThinkPad L570 (Debian 13, 10.0.0.30)
+# 
+# Services:
+#   Loki     - Log aggregation (port 3100)
+#   Grafana  - Dashboards (port 3000)
+#   Shuffle  - SOAR platform (port 3001)
+#
+# Usage:
+#   docker-compose up -d
+#   docker-compose ps
+#   docker-compose logs -f <service>
+
+services:
+
+  # ============================================================
+  # Loki - Log Storage
+  # ============================================================
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+
+  # ============================================================
+  # Grafana - Dashboards
+  # Default credentials: admin / changeme
+  # ============================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=changeme
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - loki
+
+  # ============================================================
+  # Shuffle SOAR - Workflow Orchestration
+  # ============================================================
+  shuffle-backend:
+    image: ghcr.io/shuffle/shuffle-backend:latest
+    container_name: shuffle-backend
+    restart: unless-stopped
+    environment:
+      - DATASTORE_EMULATOR_HOST=shuffle-database:8000
+      - SHUFFLE_APP_HOTLOAD_FOLDER=./shuffle-apps
+      - SHUFFLE_FILE_LOCATION=./shuffle-files
+      - SHUFFLE_OPENSEARCH_URL=http://shuffle-opensearch:9200
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./shuffle-files:/shuffle-files
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  shuffle-frontend:
+    image: ghcr.io/shuffle/shuffle-frontend:latest
+    container_name: shuffle-frontend
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    environment:
+      - BACKEND_HOSTNAME=shuffle-backend
+
+  shuffle-opensearch:
+    image: opensearchproject/opensearch:2.14.0
+    container_name: shuffle-opensearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+    volumes:
+      - shuffle-opensearch:/usr/share/opensearch/data
+
+  shuffle-orborus:
+    image: ghcr.io/shuffle/shuffle-orborus:latest
+    container_name: shuffle-orborus
+    restart: unless-stopped
+    environment:
+      - AUTH=REPLACE_WITH_YOUR_AUTH
+      - ENVIRONMENT_NAME=Shuffle
+      - ORG=REPLACE_WITH_YOUR_ORG_ID
+      - SHUFFLE_SWARM_CONFIG=none
+      - BASE_URL=http://shuffle-backend:5001
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp:/tmp
+
+volumes:
+  loki-data:
+  grafana-data:
+  shuffle-opensearch:
